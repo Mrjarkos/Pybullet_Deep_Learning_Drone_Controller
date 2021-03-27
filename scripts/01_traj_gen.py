@@ -22,17 +22,29 @@ from gym_pybullet_drones.control.SimplePIDControl import SimplePIDControl
 from gym_pybullet_drones.utils.Logger import Logger
 from gym_pybullet_drones.utils.utils import sync, str2bool
 
-CHIRP_METHOD = ['linear', 'quadratic', 'hyperbolic']
-DIST_STATES = {'p':7, 'q':8}
+CHIRP_METHOD = ['linear']
+DIST_STATES = {'p':7, 'q':8, 'vz':12}
 #DIST_STATES = {'Q1':3, 'Q1':4,'Q3':5, 'Q4':6}
+STATES_DICT = {"x":0, "y":1, "z":2,
+            "Q1":3, "Q2":4, "Q3":5, "Q4":6,
+            "p":7, "q":8, "r":9,
+            "vx":10, "vy":11, "vz":12,
+            "wp":13, "wq":14, "wr":15,
+            "ax":16, "ay":17, "az":18,
+            "ap":19, "aq":20, "ar":21,
+            "RPM0":22, "RPM1":23, "RPM2":24, "RPM3":25,
+            "ux":26, "uy":27, "uz":28,
+            "uvx":29, "uvy":30, "uvz":31,
+            "up":32, "uq":33, "ur":34,
+            "uwp":35, "uwq":36, "uwr":37}
 
-D_FACTOR = 0.2
-DIST_TIME = 8
-DIST_N = 5
+D_FACTOR = [0.18, 0.18, 1]
+DIST_TIME = 6
+DIST_N = 20
 
-N_UNIQUE_TRAJ = 5 #Number of unique trajectories
-N_SAMPLES = 12 #Number of samples per unique type of trajectory
-STEP_EACH_CHANGE = 100
+N_UNIQUE_TRAJ = 16 #Number of unique trajectories
+N_SAMPLES = 15 #Number of samples per unique type of trajectory
+STEP_EACH_CHANGE = 20
 
 if __name__ == "__main__":
 
@@ -43,25 +55,27 @@ if __name__ == "__main__":
     parser.add_argument('--physics',            default="pyb",      type=Physics,       help='Physics updates (default: PYB)', metavar='', choices=Physics)
     parser.add_argument('--gui',                default=False,      type=str2bool,      help='Whether to use PyBullet GUI (default: True)', metavar='')
     parser.add_argument('--record_video',       default=False,      type=str2bool,      help='Whether to record a video (default: False)', metavar='')
-    parser.add_argument('--plot',               default=False,      type=str2bool,      help='Whether to plot the simulation results (default: True)', metavar='')
+    parser.add_argument('--plot',               default=True,      type=str2bool,      help='Whether to plot the simulation results (default: True)', metavar='')
     parser.add_argument('--user_debug_gui',     default=False,      type=str2bool,      help='Whether to add debug lines and parameters to the GUI (default: False)', metavar='')
     parser.add_argument('--aggregate',          default=False,      type=str2bool,      help='Whether to aggregate physics steps (default: False)', metavar='')
     parser.add_argument('--obstacles',          default=False,      type=str2bool,      help='Whether to add obstacles to the environment (default: True)', metavar='')
     parser.add_argument('--simulation_freq_hz', default=240,        type=int,           help='Simulation frequency in Hz (default: 240)', metavar='')
     parser.add_argument('--control_freq_hz',    default=48,         type=int,           help='Control frequency in Hz (default: 48)', metavar='')
-    parser.add_argument('--duration_sec',       default=100,         type=int,           help='Duration of the simulation in seconds (default: 5)', metavar='')
+    parser.add_argument('--duration_sec',       default=100,        type=int,           help='Duration of the simulation in seconds (default: 5)', metavar='')
     parser.add_argument('--vel_ctrl',           default=True,       type=str2bool,      help='Whether to use Speed Controller (default: False)', metavar='')
     parser.add_argument('--disturbances',       default=True,       type=str2bool,      help='Whether to disturb the DISTURBANCES states (default: False)', metavar='')
-    parser.add_argument('--save_data',          default=True,       type=str2bool,      help='Whether to save the data (default: True)', metavar='')
+    parser.add_argument('--save_data',          default=False,       type=str2bool,      help='Whether to save the data (default: True)', metavar='')
     ARGS = parser.parse_args()
 
     #### Initialize the simulation #############################
-    H = 25
+    H = 50
     H_STEP = .05
     INIT_XYZS = np.array([[0, 0, H+i*H_STEP] for i in range(ARGS.num_drones)])
     INIT_RPYS = np.array([[0, 0,  i * (np.pi/2)/ARGS.num_drones] for i in range(ARGS.num_drones)])
     AGGR_PHY_STEPS = int(ARGS.simulation_freq_hz/ARGS.control_freq_hz) if ARGS.aggregate else 1
     
+    if ARGS.disturbances:
+        STEP_EACH_CHANGE *= 1.25
     #### Initialize trajectory ######################
     NUM_WP = ARGS.control_freq_hz*ARGS.duration_sec
     wp_counters = np.array([int((i*NUM_WP/6)%NUM_WP) for i in range(ARGS.num_drones)])
@@ -77,16 +91,65 @@ if __name__ == "__main__":
         TARGET_TRAY_LIN = np.zeros((NUM_WP,3))
         Rand_1 = np.random.rand()
         Rand_2 = np.random.rand()
+        Rand_3 = [0]*len(DIST_STATES)
+        Rand_4 = np.random.rand()
+        unstable = False
+
         if k%N_UNIQUE_TRAJ==0:
-            z = trajectories.step_ret0(NUM_WP, 2.5*Rand_1, -2.5*Rand_1, 3, 2*STEP_EACH_CHANGE)
+            traj_type = "step_notret0"
+            z = trajectories.step_notret0(NUM_WP, 7*Rand_1, -6*Rand_1, 6, STEP_EACH_CHANGE)
         elif k%N_UNIQUE_TRAJ==1:
-            z = trajectories.step_notret0(NUM_WP, 3*Rand_1, -3*Rand_1, 3, STEP_EACH_CHANGE)
+            traj_type = "step_ret0"
+            z = trajectories.step_ret0(NUM_WP, 4*Rand_1, -3*Rand_1, 2, 8.5*STEP_EACH_CHANGE)
         elif k%N_UNIQUE_TRAJ==2:
-            z = trajectories.chirp(NUM_WP, ARGS.control_freq_hz, Rand_1+0.25, 0.1*(Rand_2+0.1), 25*(Rand_2+0.5), 0.9*NUM_WP, method=random.choice(CHIRP_METHOD))
+            traj_type = "ramp_step_notret0"
+            z = trajectories.ramp_step_notret0(NUM_WP, 5*Rand_1, -3.5*Rand_1, 2.5, 10*STEP_EACH_CHANGE)
         elif k%N_UNIQUE_TRAJ==3:
-            z = trajectories.triangular_sweep(NUM_WP, ARGS.control_freq_hz, 3*Rand_1, 0.1*(Rand_2+0.1), 15*(Rand_2+0.5))
+            traj_type = "big_step_notret0"
+            z = trajectories.big_step_notret0(NUM_WP, 5*Rand_1, -4*Rand_1, 1., 20*STEP_EACH_CHANGE)
+        elif k%N_UNIQUE_TRAJ==4:
+            traj_type = "step_notret0"
+            z = trajectories.step_notret0(NUM_WP, 2*Rand_1, -2*Rand_1, 10, STEP_EACH_CHANGE)
+        elif k%N_UNIQUE_TRAJ==5:
+            traj_type = "step_ret0"
+            z = trajectories.step_ret0(NUM_WP, 3*Rand_1, -2.5*Rand_1, 5, 5.5*STEP_EACH_CHANGE)
+        elif k%N_UNIQUE_TRAJ==6:
+            traj_type = "ramp_step_notret0"
+            z = trajectories.ramp_step_notret0(NUM_WP, 2.5*Rand_1, -2*Rand_1, 2.5, 8*STEP_EACH_CHANGE)
+        elif k%N_UNIQUE_TRAJ==7:
+            traj_type = "big_step_notret0"
+            z = trajectories.big_step_notret0(NUM_WP, 2.5*Rand_1, -2*Rand_1, 2.5, 8*STEP_EACH_CHANGE)
+        elif k%N_UNIQUE_TRAJ==8:
+            traj_type = "step_notret0"
+            z = trajectories.step_notret0(NUM_WP, 1*Rand_1, -1*Rand_1, 20, 0.8*STEP_EACH_CHANGE)
+        elif k%N_UNIQUE_TRAJ==9:
+            traj_type = "step_ret0"
+            z = trajectories.step_ret0(NUM_WP, 1*Rand_1, -1*Rand_1, 6, 4*STEP_EACH_CHANGE)
+        elif k%N_UNIQUE_TRAJ==10:
+            traj_type = "ramp_step_notret0"
+            z = trajectories.ramp_step_notret0(NUM_WP, 1*Rand_1, -1*Rand_1, 4, 6*STEP_EACH_CHANGE)
+        elif k%N_UNIQUE_TRAJ==11:
+            traj_type = "big_step_notret0"
+            z = trajectories.big_step_notret0(NUM_WP, 1*Rand_1, -1*Rand_1, 4, 5*STEP_EACH_CHANGE)
+        elif k%N_UNIQUE_TRAJ==12:
+            traj_type = "stopped"
+            z = trajectories.stopped(NUM_WP)
+        elif k%N_UNIQUE_TRAJ==13:
+            traj_type = "stopped"
+            z = trajectories.stopped(NUM_WP)
         else:
-            z = trajectories.noise(NUM_WP, ARGS.control_freq_hz, 2*(Rand_1+0.1), 0.9/(Rand_1+1), 20)
+            traj_type = "noise"
+            z = trajectories.noise(NUM_WP, ARGS.control_freq_hz, (Rand_1+0.25), 0.8/(2*Rand_1+1), 4)
+
+        # if  k%N_UNIQUE_TRAJ==0:
+        #     traj_type = "sawtooth_sweep"
+        #     z = trajectories.sawtooth_sweep(NUM_WP, ARGS.control_freq_hz, 1, 0.25, 25)
+        # elif  k%N_UNIQUE_TRAJ==1:
+        #     traj_type = "chirp"
+        #     z = trajectories.chirp(NUM_WP, ARGS.control_freq_hz, 1, 0.25, 40, 0.9*NUM_WP, method='linear')
+        # elif  k%N_UNIQUE_TRAJ==2:
+        #     traj_type = "triangular_sweep"
+        #     z = trajectories.triangular_sweep(NUM_WP, ARGS.control_freq_hz, 2.5, 0.25, 14)
 
         for i in range(NUM_WP):
             TARGET_TRAY_LIN[i, :] = 0, 0, z[i]
@@ -137,24 +200,27 @@ if __name__ == "__main__":
         if ARGS.disturbances:
             l=0
             DIST_EVERY_N_STEPS = np.round(ARGS.duration_sec*env.SIM_FREQ/DIST_N)
-            Rand_3 = [np.random.rand()]*len(DIST_STATES)
+            if traj_type == "stopped":
+                DIST_EVERY_N_STEPS *= 0.8
+
         for i in range(0, int(ARGS.duration_sec*env.SIM_FREQ), AGGR_PHY_STEPS):
 
             #### Step the simulation ###################################
             obs, reward, done, info = env.step(action)
-            #print(f"observation = {obs['0']['state']}")  
-            #pos_x, pos_y, pos_z, Q1, Q2, Q3, Q4, roll, pitch, yaw,     9
-            #vel_x, vel_y, vel_z, ang_vel_x, ang_vel_y, ang_vel_z,  15
-            #acc_x, acc_y, acc_z, ang_acc_x, ang_acc_y, ang_acc_z, 
-            #last action = rpm0, rpm1, rpm2, rpm3    
-
+            if unstable:
+                break
             #### Disturbances ##########################################
             if ARGS.disturbances and ((i%DIST_EVERY_N_STEPS == 20) or l>0):
                 l += 1
                 for j in range(ARGS.num_drones):
+                    if abs(obs[str(j)]["state"][STATES_DICT['p']])>0.6 or abs(obs[str(j)]["state"][STATES_DICT['q']])>0.6 or abs(obs[str(j)]["state"][STATES_DICT['z']])<2 or abs(obs[str(j)]["state"][STATES_DICT['vz']])>10:
+                        unstable = True
+                        print('***************UNSTABLE************')
+                        break
+                    
                     ##### Disturbance ###################################
                     for nd, d in enumerate(DIST_STATES):
-                        dist = 2*(-0.5+Rand_3[nd])*(obs[str(j)]["state"][DIST_STATES[d]]+1)*D_FACTOR
+                        dist = 2*(-0.5+Rand_3[nd])*(obs[str(j)]["state"][DIST_STATES[d]]+1)*D_FACTOR[nd]
                         obs[str(j)]["state"][DIST_STATES[d]] += dist
                     
                     if ("p" in DIST_STATES) or ("q" in DIST_STATES) or ("r" in DIST_STATES):
@@ -166,8 +232,19 @@ if __name__ == "__main__":
         
                 if l>DIST_TIME*CTRL_EVERY_N_STEPS+1:
                     l=0
-                    for d in range(len(DIST_STATES)):
-                        Rand_3[d] = np.random.rand()
+                    Rand_4 = np.random.rand()
+                    Rand_3 = [0.5]*len(DIST_STATES)
+                    if Rand_4<0.3:
+                        Rand_3[0] = np.random.rand()
+                    elif Rand_4<0.55:
+                        Rand_3[1] = np.random.rand()
+                    elif Rand_4<0.8:
+                        Rand_3 = np.random.rand(len(DIST_STATES)).tolist()
+                        Rand_3[2] = 0.5
+
+                    if np.random.rand()>=0.2:
+                        Rand_3[2] = np.random.rand()
+
 
             #### Compute control at the desired frequency ##############
             if i%CTRL_EVERY_N_STEPS == 0:
@@ -206,10 +283,11 @@ if __name__ == "__main__":
         env.close()
 
         #### Save the simulation results ###########################
-        if ARGS.save_data:
-            print(f"*******************{k}*******************")
-            logger.save_csv(f"{k}")
+        if ARGS.save_data and not unstable:
+            print(f"*******************{k}_{traj_type}*******************")
+            logger.save_csv(f"{k}_{traj_type}")
             
         #### Plot the simulation results ###########################
         if ARGS.plot:
-            logger.plot()
+            utils.plot_fourier(z, ARGS.control_freq_hz)#frequency analysis
+            logger.plot()            

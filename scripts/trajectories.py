@@ -12,8 +12,8 @@ def step_ret0(length, max, min, N_cycles, each):
         each (int) -> How many numbers does the reference change
     '''
     path = np.zeros(length)
-    a = 0
-    b = 0
+    a = np.random.rand()
+    b = np.random.rand()
     up = True
     step = (max-min)/((length/(2*each))/N_cycles)
     for i in range(length):
@@ -36,6 +36,40 @@ def step_ret0(length, max, min, N_cycles, each):
             path[i] = 0
     return path
 
+def ramp_step_notret0(length, max, min, N_cycles, each):
+    '''
+    Return a cyclical step trajectory with length points data and return to 0, N_iter cycles and beetwen max and min values.
+        length (int) -> number of points of the trajectory
+        max (float) -> Upper limit of the path 
+        min (float) -> Lower limit of the path
+        N_iter (int) -> Number of cycles in the data, important to calculate step size
+        each (int) -> How many numbers does the reference change
+    '''
+    path = np.zeros(length)
+    a = np.random.rand()
+    b = np.random.rand()
+    up = True
+    step = (max-min)/((length/(2*each))/N_cycles)
+    for i in range(length):
+        if int(i%each)==0:
+            if a>max:
+                up=False
+            if a<min:
+                up=True
+
+            b = np.random.rand()*step
+            
+            if up:
+                a=a+step
+            else:
+                a=a-step
+
+        if i%each>each/2:
+            path[i] = a+b
+        else:
+            path[i] = -(a+b)
+    return path
+
 def step_notret0(length, max, min, N_cycles, each):
     '''
     Return a cyclical step trajectory with length points data and not return to 0, N_iter cycles and beetwen max and min values.
@@ -46,8 +80,8 @@ def step_notret0(length, max, min, N_cycles, each):
         each (int) -> How many numbers does the reference change
     '''
     path = np.zeros(length)
-    a = 0
-    b = 0
+    a = np.random.rand()
+    b = np.random.rand()
     up = True
     step = (max-min)/((length/(2*each))/N_cycles)
     for i in range(length):
@@ -65,6 +99,42 @@ def step_notret0(length, max, min, N_cycles, each):
                 b = 2*(np.random.rand()-0.5)*step
 
         path[i] = a+b
+    return path
+
+def big_step_notret0(length, max, min, N_cycles, each):
+    '''
+    Return a cyclical step trajectory with length points data and not return to 0, N_iter cycles and beetwen max and min values.
+        length (int) -> number of points of the trajectory
+        max (float) -> Upper limit of the path 
+        min (float) -> Lower limit of the path
+        N_iter (int) -> Number of cycles in the data, important to calculate step size
+        each (int) -> How many numbers does the reference change
+    '''
+    path = np.zeros(length)
+    a = np.random.rand()
+    b = np.random.rand()
+    up = True
+    step = (max-min)/((length/(2*each))/N_cycles)
+    for i in range(length):
+        if int(i%each)==0:
+            if a>max:
+                up=False
+            if a<min:
+                up=True
+
+            if up:
+                a=a+step
+                b = 2*np.random.rand()*step
+            else:
+                a=a-step
+                b = 2*(np.random.rand()-0.5)*step
+
+        if i%each<each/4:
+            path[i] = a+b
+        elif i%each>each/2 and i%each<3*each/4:
+            path[i] = -(a+b)    
+        else:
+            path[i] = 0
     return path
 
 def chirp(duration, fs, k, f0, f1, t1, method='linear'):
@@ -100,6 +170,26 @@ def triangular_sweep(duration, fs, k, f0, f1):
     f_sweep = np.linspace(f0,f1,num=samples) # Sweep from slow to high frequency
     path = k*signal.sawtooth(np.pi*f_sweep*t, width=0.5)
     return path
+
+def sawtooth_sweep(duration, fs, k, f0, f1):
+    '''
+    Generate swept-frequency triangular (chirp) signal length points data with gain K.
+        duration (float seconds) -> How long is the simulation? 
+        fs (float Hz) -> Sampling Freq
+        k (int) -> Gain
+        f0 (float) -> Frequency (e.g. Hz) at time t=0.
+        f1 (float) -> Frequency (e.g. Hz) of the waveform at time t1=duration.
+    '''
+    if f0<0.001 or f1<0.001 or fs<0.001:
+        raise Exception("Sorry, no numbers below zero")
+    samples = duration*fs
+    t = np.linspace(0,duration,num=samples)
+    f_sweep = np.linspace(f0,f1,num=samples) # Sweep from slow to high frequency
+    path = k*signal.sawtooth(np.pi*f_sweep*t, width=1)
+    return path
+
+def stopped(length):
+    return np.zeros(length)
 
 
 def noise(duration, fs, k, f0, Order):
