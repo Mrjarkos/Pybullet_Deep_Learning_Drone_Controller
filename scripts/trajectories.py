@@ -12,14 +12,15 @@ def step_ret0(length, max, min, N_cycles, each):
         each (int) -> How many numbers does the reference change
     '''
     path = np.zeros(length)
-    a = np.random.rand()
-    b = np.random.rand()
+    a = 0
+    b = 0
     up = True
-    step = (max-min)/((length/(2*each))/N_cycles)
+    step = (max-min)/((length/(2*each))/N_cycles)*0.9
     for i in range(length):
         if int(i%each)==0:
             if a>max:
                 up=False
+                step*=1.1
             if a<min:
                 up=True
 
@@ -34,6 +35,26 @@ def step_ret0(length, max, min, N_cycles, each):
             path[i] = a+b
         else:
             path[i] = 0
+        path[i] = np.maximum(np.minimum(path[i], max), min)
+    return path
+
+def random_step(length, K, DC, each):
+    '''
+    Return a random step trajectory with length points data and return to 0, N_iter cycles and beetwen max and min values.
+        length (int) -> number of points of the trajectory
+        K (float) -> Upper-Lower limit of the path (Gain or Amplitude)
+        DC (float) -> Lower limit of the path (DC Level)
+        each (int) -> How many steps does the reference change
+    '''
+    path = np.zeros(length)
+    for i in range(length):
+        if int(i%each)==0:
+            a = (K-DC)*np.random.rand()+DC
+
+        if i%each>each/2:
+            path[i] = a
+        else:
+            path[i] = 0
     return path
 
 def ramp_step_notret0(length, max, min, N_cycles, each):
@@ -46,10 +67,10 @@ def ramp_step_notret0(length, max, min, N_cycles, each):
         each (int) -> How many numbers does the reference change
     '''
     path = np.zeros(length)
-    a = np.random.rand()
-    b = np.random.rand()
+    a = 0
+    b = 0
     up = True
-    step = (max-min)/((length/(2*each))/N_cycles)
+    step = (max-min)/((length/(2*each))/N_cycles)*0.5
     for i in range(length):
         if int(i%each)==0:
             if a>max:
@@ -57,7 +78,7 @@ def ramp_step_notret0(length, max, min, N_cycles, each):
             if a<min:
                 up=True
 
-            b = np.random.rand()*step
+            b = np.random.rand()*step*0.1
             
             if up:
                 a=a+step
@@ -68,6 +89,7 @@ def ramp_step_notret0(length, max, min, N_cycles, each):
             path[i] = a+b
         else:
             path[i] = -(a+b)
+        path[i] = np.maximum(np.minimum(path[i], max), min)
     return path
 
 def step_notret0(length, max, min, N_cycles, each):
@@ -80,28 +102,29 @@ def step_notret0(length, max, min, N_cycles, each):
         each (int) -> How many numbers does the reference change
     '''
     path = np.zeros(length)
-    a = np.random.rand()
-    b = np.random.rand()
+    a = 0
+    b = 0
     up = True
-    step = (max-min)/((length/(2*each))/N_cycles)
+    step = (max-min)/((length/(2*each))/N_cycles)*0.9
     for i in range(length):
         if int(i%each)==0:
             if a>max:
                 up=False
+                step*=1.09
             if a<min:
                 up=True
 
             if up:
                 a=a+step
-                b = 2*np.random.rand()*step
             else:
                 a=a-step
-                b = 2*(np.random.rand()-0.5)*step
 
+            b = (np.random.rand()-0.5)*step
         path[i] = a+b
+        path[i] = np.maximum(np.minimum(path[i], max), min)
     return path
 
-def big_step_notret0(length, max, min, N_cycles, each):
+def big_step_ret0(length, max, min, N_cycles, each):
     '''
     Return a cyclical step trajectory with length points data and not return to 0, N_iter cycles and beetwen max and min values.
         length (int) -> number of points of the trajectory
@@ -111,14 +134,15 @@ def big_step_notret0(length, max, min, N_cycles, each):
         each (int) -> How many numbers does the reference change
     '''
     path = np.zeros(length)
-    a = np.random.rand()
-    b = np.random.rand()
+    a = 0
+    b = 0
     up = True
-    step = (max-min)/((length/(2*each))/N_cycles)
+    step = (max-min)/((length/(2*each))/N_cycles)*0.9
     for i in range(length):
         if int(i%each)==0:
             if a>max:
                 up=False
+                step*=1.1
             if a<min:
                 up=True
 
@@ -135,6 +159,7 @@ def big_step_notret0(length, max, min, N_cycles, each):
             path[i] = -(a+b)    
         else:
             path[i] = 0
+        path[i] = np.maximum(np.minimum(path[i], max), min)
     return path
 
 def chirp(duration, fs, k, f0, f1, t1, method='linear'):
@@ -188,11 +213,10 @@ def sawtooth_sweep(duration, fs, k, f0, f1):
     path = k*signal.sawtooth(np.pi*f_sweep*t, width=1)
     return path
 
-def stopped(length):
-    return np.zeros(length)
+def stopped(length, DC): 
+    return np.zeros(length)+DC
 
-
-def noise(duration, fs, k, f0, Order):
+def noise(duration, fs, k, f0, Order=10):
     '''
     White noise with k gain and f0 cut frequency
         duration (float seconds) -> How long is the simulation? 
@@ -204,15 +228,22 @@ def noise(duration, fs, k, f0, Order):
     if f0<0.001 or fs<0.001 or Order<1:
         raise Exception("Sorry, no numbers below zero")
     samples = duration*fs
-    sig = k*(np.random.random(size=samples)-0.5)
+    sig = 2*k*(np.random.random(size=samples)-0.5)
     sos = signal.butter(int(Order), 2*np.pi*f0, 'low', fs=fs, output='sos')
     filtered = signal.sosfilt(sos, sig)
     return filtered
-
+    
 def step(duration, val):
     path = np.zeros(duration)
     for i in range(duration):
-        if i>0.2*duration and i<0.75*duration:
+        if i>0.2*duration and i<0.7*duration:
+            path[i] = val
+    return path
+
+def pulse(duration, val, finish):
+    path = np.zeros(duration)
+    for i in range(duration):
+        if i>0.2*duration and i<finish*duration:
             path[i] = val
     return path
 
@@ -226,10 +257,10 @@ def ramp(duration, m, fs):
 def square(duration, m, fs):
     path = np.zeros(duration)
     for i in range(duration):
-        if i>0.2*duration and i<0.75*duration:
+        if i>0.2*duration and i<0.7*duration:
             path[i] = m*(i/fs-0.2*duration/fs)**2
     return path
 
-def sin(duration, a, f,fs):
+def sin(duration, a, f, fs):
     t = np.linspace(0, duration/fs, duration)
     return a*np.sin(2*np.pi*f*t)

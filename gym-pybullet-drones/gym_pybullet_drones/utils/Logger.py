@@ -7,6 +7,18 @@ import matplotlib.pyplot as plt
 import pandas as pd
 
 os.environ['KMP_DUPLICATE_LIB_OK']='True'
+STATES_DICT = {"x":0, "y":1, "z":2,
+            "Q1":3, "Q2":4, "Q3":5, "Q4":6,
+            "p":7, "q":8, "r":9,
+            "vx":10, "vy":11, "vz":12,
+            "wp":13, "wq":14, "wr":15,
+            "ax":16, "ay":17, "az":18,
+            "ap":19, "aq":20, "ar":21,
+            "RPM0":22, "RPM1":23, "RPM2":24, "RPM3":25,
+            "ux":26, "uy":27, "uz":28,
+            "uvx":29, "uvy":30, "uvz":31,
+            "up":32, "uq":33, "ur":34,
+            "uwp":35, "uwq":36, "uwr":37}
 
 class Logger(object):
     """A class for logging and visualization.
@@ -104,6 +116,14 @@ class Logger(object):
         self.controls[drone, :, current_counter] = control
         self.counters[drone] = current_counter + 1
 
+    def getStates(self, drone, states):
+        st_dict = {}
+        for state in states:
+            if state[0]=='u':
+                st_dict[state] = self.controls[drone, STATES_DICT[state]-26, :]
+            else:
+                st_dict[state] = self.states[drone, STATES_DICT[state], :]
+        return st_dict
     ################################################################################
 
     def save(self):
@@ -140,7 +160,7 @@ class Logger(object):
             path = os.path.dirname(os.path.abspath(__file__))+"/../../files/logs/"
         pd.concat([result, controls], axis=1, join='inner').to_csv(path+name+".csv", index=False)
     
-    def plot(self, pwm=False):
+    def plot(self, pwm=False, save_figure=False, name="", path="", format='png'):
         """Logs entries for a single simulation step, of a single drone.
 
         Parameters
@@ -151,7 +171,7 @@ class Logger(object):
         """
         #### Loop over colors and line styles ######################
         plt.rc('axes', prop_cycle=(cycler('color', ['r', 'g', 'b', 'g']) + cycler('linestyle', ['-', '--', '-', '--'])))
-        fig, axs = plt.subplots(10, 2)
+        fig, axs = plt.subplots(10, 2, figsize=(15,15))
         t = np.arange(0, self.timestamps.shape[1]/self.LOGGING_FREQ_HZ, 1/self.LOGGING_FREQ_HZ)
 
         #### Column ################################################
@@ -342,4 +362,11 @@ class Logger(object):
                             wspace=0.15,
                             hspace=0.0
                             )
-        plt.show()
+        plt.show(block=False)
+
+        if save_figure:
+            if name == "":
+                name = "save-flight-"+datetime.now().strftime("%m.%d.%Y_%H.%M.%S")
+            if path == "":
+                path = os.path.dirname(os.path.abspath(__file__))+"/../../files/logs/"
+            plt.savefig(path+name+'.'+format, dpi=300, format=format) 

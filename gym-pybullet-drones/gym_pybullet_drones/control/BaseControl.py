@@ -91,7 +91,48 @@ class BaseControl(object):
                                    target_vel=target_vel,
                                    target_rpy_rates=target_rpy_rates
                                    )
+    def setPIDconst(self,
+                    P_COEFF_FOR, I_COEFF_FOR, D_COEFF_FOR,
+                    P_COEFF_TOR, I_COEFF_TOR, D_COEFF_TOR):
+        if P_COEFF_FOR is not None:
+            self.P_COEFF_FOR = P_COEFF_FOR
+        if I_COEFF_FOR is not None:
+            self.I_COEFF_FOR = I_COEFF_FOR
+        if D_COEFF_FOR is not None:
+            self.D_COEFF_FOR = D_COEFF_FOR
+        if P_COEFF_TOR is not None:
+            self.P_COEFF_TOR = P_COEFF_TOR
+        if I_COEFF_TOR is not None:
+            self.I_COEFF_TOR = I_COEFF_TOR
+        if D_COEFF_TOR is not None:
+            self.D_COEFF_TOR = D_COEFF_TOR
 
+    def setPIDconstXYZRPY(self, PID_X, PID_Y, PID_Z,
+                          PID_ROLL, PID_PITCH, PID_YAW):
+        self.P_COEFF_FOR = np.array([PID_X[0],PID_Y[0], PID_Z[0]])
+        self.I_COEFF_FOR = np.array([PID_X[1],PID_Y[1], PID_Z[1]])
+        self.D_COEFF_FOR = np.array([PID_X[2],PID_Y[2], PID_Z[2]])
+        self.P_COEFF_TOR = np.array([PID_ROLL[0],PID_PITCH[0], PID_YAW[0]])
+        self.I_COEFF_TOR = np.array([PID_ROLL[1],PID_PITCH[1], PID_YAW[1]])
+        self.D_COEFF_TOR = np.array([PID_ROLL[2],PID_PITCH[2], PID_YAW[2]])
+
+    def getPIDconst(self):
+        return [self.P_COEFF_FOR, 
+                self.I_COEFF_FOR, 
+                self.D_COEFF_FOR, 
+                self.P_COEFF_TOR, 
+                self.I_COEFF_TOR, 
+                self.D_COEFF_TOR]
+
+    def getPIDconstXYZRPY(self):
+        PID_X = np.array([self.P_COEFF_FOR[0], self.I_COEFF_FOR[0], self.D_COEFF_FOR[0]])
+        PID_Y = np.array([self.P_COEFF_FOR[1], self.I_COEFF_FOR[1], self.D_COEFF_FOR[1]])
+        PID_Z = np.array([self.P_COEFF_FOR[2], self.I_COEFF_FOR[2], self.D_COEFF_FOR[2]])
+        PID_ROLL = np.array([self.P_COEFF_TOR[0], self.I_COEFF_TOR[0], self.D_COEFF_TOR[0]])
+        PID_PITCH = np.array([self.P_COEFF_TOR[1], self.I_COEFF_TOR[1], self.D_COEFF_TOR[1]])
+        PID_YAW = np.array([self.P_COEFF_TOR[2], self.I_COEFF_TOR[2], self.D_COEFF_TOR[2]])
+        return [PID_X, PID_Y, PID_Z,
+                PID_ROLL, PID_PITCH, PID_YAW]
     ################################################################################
 
     def computeControl(self,

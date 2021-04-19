@@ -70,6 +70,8 @@ STATES_DICT = {"x":0, "y":1, "z":2,
             "uwp":35, "uwq":36, "uwr":37}
 
 K = 21666.4475
+B = 14468.4292
+#B = 0
 rpm_list = ['RPM0', 'RPM1', 'RPM2', 'RPM3']
 states_list = ["vz","az", "uvz",
                 "p", "q",
@@ -78,8 +80,8 @@ states_list = ["vz","az", "uvz",
 ORDER = 3
 N_state = (ORDER+1)*len(states_list)
 
-D_FACTOR = [0.2, 0.2, 1]
-DIST_TIME = 6
+D_FACTOR = [0.2, 0.2, 1.2]
+DIST_TIME = 12
 DIST_N = 4
 
 if __name__ == "__main__":
@@ -100,7 +102,7 @@ if __name__ == "__main__":
     parser.add_argument('--control_freq_hz',    default=48,         type=int,           help='Control frequency in Hz (default: 48)', metavar='')
     parser.add_argument('--duration_sec',       default=20,          type=int,           help='Duration of the simulation in seconds (default: 5)', metavar='')
     parser.add_argument('--vel_ctrl',           default=True,       type=str2bool,      help='Whether to use Speed Controller (default: False)', metavar='')
-    parser.add_argument('--disturbances',       default=True,       type=str2bool,      help='Whether to disturb the DISTURBANCES states (default: False)', metavar='')
+    parser.add_argument('--disturbances',       default=False,       type=str2bool,      help='Whether to disturb the DISTURBANCES states (default: False)', metavar='')
     ARGS = parser.parse_args()
 
     #for filename in os.listdir(directory):
@@ -132,7 +134,7 @@ if __name__ == "__main__":
         Rand_1 = 2*(np.random.rand()-0.5)
         Rand_2 = 10*np.random.rand()
         if k%N==0:
-            z = trajectories.stopped(NUM_WP)
+            z = trajectories.stopped(NUM_WP, 0)
         elif k%N==1:
             z = trajectories.step(NUM_WP, Rand_1)
         elif k%N==2:
@@ -144,7 +146,7 @@ if __name__ == "__main__":
         elif k%N==5:
             z =  trajectories.noise(NUM_WP, ARGS.control_freq_hz, 2*(Rand_1+0.1), 0.3, 20)
         else:
-            z = trajectories.stopped(NUM_WP)
+            z = trajectories.stopped(NUM_WP, Rand_1)
 
         for i in range(NUM_WP):
             if i>2*ARGS.control_freq_hz and i<NUM_WP-3*ARGS.control_freq_hz:
@@ -158,7 +160,7 @@ if __name__ == "__main__":
                 TARGET_POS[i, :] = TARGET_TRAY_LIN[i, :]
                 TARGET_RPY[i, :] = TARGET_TRAY_ROT[i, :] 
         #with open(os.path.join(directory, filename))
-        model = tf.keras.models.load_model('Models/Dataset_Z7_Disturbance_Z_2.h5')
+        model = tf.keras.models.load_model('Models/Dataset_Z7_Disturbance_Z_1_Pandas.h5')
         #### Create the environment with or without video capture ##
         env = CtrlAviary(drone_model=ARGS.drone,
                             num_drones=ARGS.num_drones,
@@ -209,7 +211,7 @@ if __name__ == "__main__":
             if ARGS.disturbances and ((i%DIST_EVERY_N_STEPS == 20) or l>0):
                 l += 1
                 for j in range(ARGS.num_drones):
-                    if abs(obs[str(j)]["state"][STATES_DICT['p']])>0.6 or abs(obs[str(j)]["state"][STATES_DICT['q']])>0.6 or abs(obs[str(j)]["state"][STATES_DICT['z']])<2 :
+                    if abs(obs[str(j)]["state"][STATES_DICT['p']])>0.6 or abs(obs[str(j)]["state"][STATES_DICT['q']])>0.6 or abs(obs[str(j)]["state"][STATES_DICT['z']])<2 or abs(obs[str(j)]["state"][STATES_DICT['vz']])>10:
                         unstable = True
                         print('***************UNSTABLE************')
                         break
@@ -226,7 +228,7 @@ if __name__ == "__main__":
                         for q in range(len(quat)):
                             obs[str(j)]["state"][q+3] = quat[q]
         
-                if l>DIST_TIME*CTRL_EVERY_N_STEPS+1:
+                if l>(DIST_TIME*1.5*(np.random.rand()+0.5))*CTRL_EVERY_N_STEPS+1:
                     l=0
                     Rand_4 = np.random.rand()
                     Rand_3 = [0.5]*len(DIST_STATES)
@@ -252,9 +254,9 @@ if __name__ == "__main__":
                     current_state = list(obs[str(j)]["state"])+control
                     if j==0:#i> env.SIM_FREQ and j==0:
                         state = [current_state[STATES_DICT[x]] for x in states_list]+state[0:N_state-len(states_list)]
-                        RPM = model.predict([state])*K
-                        action[str(j)] = [RPM[0][0], RPM[0][0], RPM[0][0], RPM[0][0]]
-                        #action[str(j)] = RPM
+                        RPM = model.predict([state])*K+B
+                        #action[str(j)] = [RPM[0][0], RPM[0][0], RPM[0][0], RPM[0][0]]
+                        action[str(j)] = np.round(RPM)
                         
                     else:
                         action[str(j)], _, _ = ctrl[j].computeControlFromState(control_timestep=CTRL_EVERY_N_STEPS*env.TIMESTEP,
