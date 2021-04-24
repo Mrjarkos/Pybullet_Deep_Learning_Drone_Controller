@@ -89,7 +89,16 @@ class PybulletSimDrone(object):
                 user_debug_gui=False,
                 aggregate=False, 
                 obstacles=False,
-                save_data = False, 
+                save_data = False,
+                disturbances = False,
+                noise = False,
+                DIST_STATES = [],
+                NOISE_STATES = [],
+                D_FACTOR = [],
+                N_FACTOR = [],
+                N_PROB = [],
+                D_PROB = [],
+                DIST_TIME = [],
                 simulation_freq_hz=240,
                 control_freq_hz=48,
                 duration_sec=10):
@@ -276,9 +285,11 @@ class PybulletSimDrone(object):
                         )
 
     def runSim(self):
+        #### Run the simulation ####################################
         CTRL_EVERY_N_STEPS = int(np.floor(self.env.SIM_FREQ/self.control_freq_hz))
         actions = {str(drone.name): np.array([0,0,0,0]) for drone in self.drones}
         START = time.time()
+        
         for i in range(0, int(self.duration_sec*self.env.SIM_FREQ), self.AGGR_PHY_STEPS):
             self.step(actions)
             for drone in self.drones:

@@ -196,7 +196,7 @@ if __name__ == "__main__":
         ### Disturbances variables ######
         if ARGS.disturbances:
             l=0
-            DIST_EVERY_N_STEPS = np.round(ARGS.duration_sec*env.SIM_FREQ/DIST_N)
+            DIST_EVERY_N_STEPS = np.ceil(ARGS.duration_sec*env.SIM_FREQ/DIST_N)
             if traj_type == "stopped":
                 DIST_EVERY_N_STEPS *= 0.8
 
