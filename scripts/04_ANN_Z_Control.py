@@ -69,15 +69,24 @@ STATES_DICT = {"x":0, "y":1, "z":2,
             "up":32, "uq":33, "ur":34,
             "uwp":35, "uwq":36, "uwr":37}
 
-K = 21666.4475
-B = 14468.4292
-#B = 0
+#K = 21666.4475
+#B = 14468.4292
+K = 12226.1475
+B = 9440.3
 rpm_list = ['RPM0', 'RPM1', 'RPM2', 'RPM3']
 states_list = ["vz","az", "uvz",
                 "p", "q",
                 "wp", "wq", 
                 "ap", "aq"]
+# states_list = [ "vx","ax", "uvx", 
+#                 "vy","ay", "uvy", 
+#                 "vz","az", "uvz", 
+#                 "p", "q", "r",
+#                 "wp", "wq", "wr",
+#                 "ap", "aq", "ar"]
 ORDER = 3
+I = 'Pandas'
+dataset = f'Dataset_Z_{I}'
 N_state = (ORDER+1)*len(states_list)
 
 D_FACTOR = [0.2, 0.2, 1.2]
@@ -100,7 +109,7 @@ if __name__ == "__main__":
     parser.add_argument('--obstacles',          default=False,      type=str2bool,      help='Whether to add obstacles to the environment (default: True)', metavar='')
     parser.add_argument('--simulation_freq_hz', default=240,        type=int,           help='Simulation frequency in Hz (default: 240)', metavar='')
     parser.add_argument('--control_freq_hz',    default=48,         type=int,           help='Control frequency in Hz (default: 48)', metavar='')
-    parser.add_argument('--duration_sec',       default=20,          type=int,           help='Duration of the simulation in seconds (default: 5)', metavar='')
+    parser.add_argument('--duration_sec',       default=10,          type=int,           help='Duration of the simulation in seconds (default: 5)', metavar='')
     parser.add_argument('--vel_ctrl',           default=True,       type=str2bool,      help='Whether to use Speed Controller (default: False)', metavar='')
     parser.add_argument('--disturbances',       default=False,       type=str2bool,      help='Whether to disturb the DISTURBANCES states (default: False)', metavar='')
     ARGS = parser.parse_args()
@@ -109,8 +118,8 @@ if __name__ == "__main__":
     #for _ in range(1):   
 
     H = 50
-    H_STEP = .05
-    INIT_XYZS = np.array([[i, i, H] for i in range(ARGS.num_drones)])
+    H_STEP = .5
+    INIT_XYZS = np.array([[i, i, H+H_STEP*i] for i in range(ARGS.num_drones)])
     INIT_RPYS = np.array([[0, 0, 0] for i in range(ARGS.num_drones)])
     AGGR_PHY_STEPS = int(ARGS.simulation_freq_hz/ARGS.control_freq_hz) if ARGS.aggregate else 1
 
@@ -160,7 +169,7 @@ if __name__ == "__main__":
                 TARGET_POS[i, :] = TARGET_TRAY_LIN[i, :]
                 TARGET_RPY[i, :] = TARGET_TRAY_ROT[i, :] 
         #with open(os.path.join(directory, filename))
-        model = tf.keras.models.load_model('Models/Dataset_Z7_Disturbance_Z_1_Pandas.h5')
+        model = tf.keras.models.load_model(f'Models/{dataset}.h5')
         #### Create the environment with or without video capture ##
         env = CtrlAviary(drone_model=ARGS.drone,
                             num_drones=ARGS.num_drones,
@@ -252,12 +261,17 @@ if __name__ == "__main__":
                     ################# DNN CONTROL ##################
                     control = TARGET_POS[wp_counters[j], :].tolist() + TARGET_VEL[wp_counters[j], :].tolist() + TARGET_RPY[wp_counters[j], :].tolist() + TARGET_RPY_RATES[wp_counters[j], :].tolist()
                     current_state = list(obs[str(j)]["state"])+control
-                    if j==0:#i> env.SIM_FREQ and j==0:
-                        state = [current_state[STATES_DICT[x]] for x in states_list]+state[0:N_state-len(states_list)]
-                        RPM = model.predict([state])*K+B
+                    state = [current_state[STATES_DICT[x]] for x in states_list]+state[0:N_state-len(states_list)]
+                    if j==0 :#and i> env.SIM_FREQ:
+                        # print(f'state={state}')
+                        pred = model.predict([state])
+                        # print(f'prediccion={pred}')
+                        RPM = pred*K+B
+                        #print(f'RPM_NN={RPM}')
                         #action[str(j)] = [RPM[0][0], RPM[0][0], RPM[0][0], RPM[0][0]]
                         action[str(j)] = np.round(RPM)
-                        
+                        #action[str(j)] = RPM
+                        #print(action[str(j)])
                     else:
                         action[str(j)], _, _ = ctrl[j].computeControlFromState(control_timestep=CTRL_EVERY_N_STEPS*env.TIMESTEP,
                                                     state=obs[str(j)]["state"],
@@ -268,11 +282,11 @@ if __name__ == "__main__":
                                                     target_rpy_rates = TARGET_RPY_RATES[wp_counters[j], :],
                                                     vel_ctrl = ARGS.vel_ctrl
                                                     )
-                    
 
                     #### Go to the next way point and loop #####################
                     wp_counters[j] = wp_counters[j] + 1 if wp_counters[j] < (NUM_WP-1) else 0
-
+                # print(f'RPMs={action}')
+                # input("Press Enter to exit...")
             #### Log the simulation ####################################
             for j in range(ARGS.num_drones):
                 logger.log(drone = j,
@@ -295,3 +309,4 @@ if __name__ == "__main__":
         #### Plot the simulation results ###########################
         if ARGS.plot:
             logger.plot()
+            input("Press Enter to exit...")

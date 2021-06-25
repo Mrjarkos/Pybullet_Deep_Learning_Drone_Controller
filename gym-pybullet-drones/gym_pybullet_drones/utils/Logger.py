@@ -121,6 +121,8 @@ class Logger(object):
         for state in states:
             if state[0]=='u':
                 st_dict[state] = self.controls[drone, STATES_DICT[state]-26, :]
+            elif state == 't':
+                st_dict[state] = self.timestamps[drone, :]
             else:
                 st_dict[state] = self.states[drone, STATES_DICT[state], :]
         return st_dict
@@ -160,7 +162,7 @@ class Logger(object):
             path = os.path.dirname(os.path.abspath(__file__))+"/../../files/logs/"
         pd.concat([result, controls], axis=1, join='inner').to_csv(path+name+".csv", index=False)
     
-    def plot(self, pwm=False, save_figure=False, name="", path="", format='png'):
+    def plot(self, pwm=False, save_figure=False, name="", path="", format='png', plot=True):
         """Logs entries for a single simulation step, of a single drone.
 
         Parameters
@@ -362,7 +364,8 @@ class Logger(object):
                             wspace=0.15,
                             hspace=0.0
                             )
-        plt.show(block=False)
+        if plot:
+            plt.show(block=False)
 
         if save_figure:
             if name == "":
