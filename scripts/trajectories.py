@@ -162,6 +162,42 @@ def big_step_ret0(length, max, min, N_cycles, each):
         path[i] = np.maximum(np.minimum(path[i], max), min)
     return path
 
+def big_step_notret0(length, max, min, N_cycles, each):
+    '''
+    Return a cyclical step trajectory with length points data and not return to 0, N_iter cycles and beetwen max and min values.
+        length (int) -> number of points of the trajectory
+        max (float) -> Upper limit of the path 
+        min (float) -> Lower limit of the path
+        N_iter (int) -> Number of cycles in the data, important to calculate step size
+        each (int) -> How many numbers does the reference change
+    '''
+    path = np.zeros(length)
+    a = 0
+    b = 0
+    up = True
+    step = (max-min)/((length/(2*each))/N_cycles)*0.9
+    for i in range(length):
+        if int(i%each)==0:
+            if a>max:
+                up=False
+                step*=1.1
+            if a<min:
+                up=True
+
+            if up:
+                a=a+step
+                b = 2*np.random.rand()*step
+            else:
+                a=a-step
+                b = 2*(np.random.rand()-0.5)*step
+
+        if i%each>each/2 and i%each<3*each/4:
+            path[i] = -(a+b)    
+        else:
+            path[i] = path[i] = a+b
+        path[i] = np.maximum(np.minimum(path[i], max), min)
+    return path
+
 def chirp(duration, fs, k, f0, f1, t1, method='linear'):
     '''
     Generate swept-frequency cosine (chirp) signal length points data N_iter cycles and beetwen max and min values.

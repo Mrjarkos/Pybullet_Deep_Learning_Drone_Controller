@@ -21,6 +21,7 @@ import time
 from datetime import datetime
 import argparse
 import subprocess
+import numpy as np
 import gym
 import torch
 from stable_baselines3.common.env_checker import check_env
@@ -43,6 +44,7 @@ from stable_baselines3.common.callbacks import CheckpointCallback, EvalCallback,
 from gym_pybullet_drones.envs.single_agent_rl.TakeoffAviary import TakeoffAviary
 from gym_pybullet_drones.envs.single_agent_rl.HoverAviary import HoverAviary
 from gym_pybullet_drones.envs.single_agent_rl.FlyThruGateAviary import FlyThruGateAviary
+from gym_pybullet_drones.envs.single_agent_rl.TuneAviary import TuneAviary
 from gym_pybullet_drones.envs.single_agent_rl.BaseSingleAgentAviary import ActionType, ObservationType
 
 import shared_constants
@@ -54,11 +56,11 @@ if __name__ == "__main__":
 
     #### Define and parse (optional) arguments for the script ##
     parser = argparse.ArgumentParser(description='Single agent reinforcement learning experiments script')
-    parser.add_argument('--env',        default='hover',      type=str,             choices=['takeoff', 'hover', 'flythrugate'],    help='Help (default: ..)', metavar='')
-    parser.add_argument('--algo',       default='ppo',        type=str,             choices=['a2c', 'ppo', 'sac', 'td3', 'ddpg'],   help='Help (default: ..)', metavar='')
-    parser.add_argument('--obs',        default='kin',        type=ObservationType,                                                 help='Help (default: ..)', metavar='')
-    parser.add_argument('--act',        default='one_d_rpm',  type=ActionType,                                                      help='Help (default: ..)', metavar='')
-    parser.add_argument('--cpu',        default='1',          type=int,                                                             help='Help (default: ..)', metavar='')        
+    parser.add_argument('--env',        default='hover',      type=str,             choices=['takeoff', 'hover', 'flythrugate', 'tune'], help='Help (default: ..)', metavar='')
+    parser.add_argument('--algo',       default='ppo',        type=str,             choices=['a2c', 'ppo', 'sac', 'td3', 'ddpg'],        help='Help (default: ..)', metavar='')
+    parser.add_argument('--obs',        default='kin',        type=ObservationType,                                                      help='Help (default: ..)', metavar='')
+    parser.add_argument('--act',        default='one_d_rpm',  type=ActionType,                                                           help='Help (default: ..)', metavar='')
+    parser.add_argument('--cpu',        default='1',          type=int,                                                                  help='Help (default: ..)', metavar='')        
     ARGS = parser.parse_args()
 
     #### Save directory ########################################
@@ -72,12 +74,17 @@ if __name__ == "__main__":
         f.write(str(git_commit))
 
     #### Warning ###############################################
+    if ARGS.env == 'tune' and ARGS.act != ActionType.TUN:
+        print("\n\n\n[WARNING] TuneAviary is intended for use with ActionType.TUN\n\n\n")
     if ARGS.act == ActionType.ONE_D_RPM or ARGS.act == ActionType.ONE_D_DYN or ARGS.act == ActionType.ONE_D_PID:
         print("\n\n\n[WARNING] Simplified 1D problem for debugging purposes\n\n\n")
     #### Errors ################################################
         if not ARGS.env in ['takeoff', 'hover']: 
             print("[ERROR] 1D action space is only compatible with Takeoff and HoverAviary")
             exit()
+    if ARGS.act == ActionType.TUN and ARGS.env != 'tune' :
+        print("[ERROR] ActionType.TUN is only compatible with TuneAviary")
+        exit()
     if ARGS.algo in ['sac', 'td3', 'ddpg'] and ARGS.cpu!=1: 
         print("[ERROR] The selected algorithm does not support multiple environments")
         exit()
@@ -102,6 +109,12 @@ if __name__ == "__main__":
                                  )
     if env_name == "flythrugate-aviary-v0":
         train_env = make_vec_env(FlyThruGateAviary,
+                                 env_kwargs=sa_env_kwargs,
+                                 n_envs=ARGS.cpu,
+                                 seed=0
+                                 )
+    if env_name == "tune-aviary-v0":
+        train_env = make_vec_env(TuneAviary,
                                  env_kwargs=sa_env_kwargs,
                                  n_envs=ARGS.cpu,
                                  seed=0
@@ -193,19 +206,25 @@ if __name__ == "__main__":
                                     env_kwargs=sa_env_kwargs,
                                     n_envs=1,
                                     seed=0
-                                    ) 
+                                    )
         if env_nam == "hover-aviary-v0": 
             eval_env = make_vec_env(HoverAviary,
                                     env_kwargs=sa_env_kwargs,
                                     n_envs=1,
                                     seed=0
-                                    ) 
+                                    )
         if env_name == "flythrugate-aviary-v0": 
             eval_env = make_vec_env(FlyThruGateAviary,
                                     env_kwargs=sa_env_kwargs,
                                     n_envs=1,
                                     seed=0
-                                    ) 
+                                    )
+        if env_name == "tune-aviary-v0": 
+            eval_env = make_vec_env(TuneAviary,
+                                    env_kwargs=sa_env_kwargs,
+                                    n_envs=1,
+                                    seed=0
+                                    )
         eval_env = VecTransposeImage(eval_env)
 
     #### Train the model #######################################
@@ -218,15 +237,20 @@ if __name__ == "__main__":
                                  verbose=1,
                                  best_model_save_path=filename+'/',
                                  log_path=filename+'/',
-                                 eval_freq=int(5000/ARGS.cpu),
+                                 eval_freq=int(2000/ARGS.cpu),
                                  deterministic=True,
                                  render=False
                                  )
-    model.learn(total_timesteps=int(1e12),
+    model.learn(total_timesteps=35000, #int(1e12),
                 callback=eval_callback,
-                log_interval=100
+                log_interval=100,
                 )
 
-    ### Save the model #########################################
-    model.save(filename+'/success_model.zip') # Possibly never achieved
+    #### Save the model ########################################
+    model.save(filename+'/success_model.zip')
     print(filename)
+
+    #### Print training progression ############################
+    with np.load(filename+'/evaluations.npz') as data:
+        for j in range(data['timesteps'].shape[0]):
+            print(str(data['timesteps'][j])+","+str(data['results'][j][0][0]))

@@ -16,17 +16,20 @@ class DSLPIDControl(BaseControl):
     ################################################################################
 
     def __init__(self,
-                 env: BaseAviary
+                 drone_model: DroneModel,
+                 g: float=9.8
                  ):
-        """DSL PID control initialization.
+        """Common control classes __init__ method.
 
         Parameters
         ----------
-        env : BaseAviary
-            The simulation environment to control.
+        drone_model : DroneModel
+            The type of drone to control (detailed in an .urdf file in folder `assets`).
+        g : float, optional
+            The gravitational acceleration in m/s^2.
 
         """
-        super().__init__(env=env)
+        super().__init__(drone_model=drone_model, g=g)
         if self.DRONE_MODEL != DroneModel.CF2X and self.DRONE_MODEL != DroneModel.CF2P:
             print("[ERROR] in DSLPIDControl.__init__(), DSLPIDControl requires DroneModel.CF2X or DroneModel.CF2P")
             exit()
@@ -74,8 +77,7 @@ class DSLPIDControl(BaseControl):
                        target_pos,
                        target_rpy=np.zeros(3),
                        target_vel=np.zeros(3),
-                       target_rpy_rates=np.zeros(3),
-                       vel_ctrl = False
+                       target_rpy_rates=np.zeros(3)
                        ):
         """Computes the PID control action (as RPMs) for a single drone.
 
@@ -120,16 +122,14 @@ class DSLPIDControl(BaseControl):
                                                                          cur_vel,
                                                                          target_pos,
                                                                          target_rpy,
-                                                                         target_vel,
-                                                                         vel_ctrl
+                                                                         target_vel
                                                                          )
         rpm = self._dslPIDAttitudeControl(control_timestep,
                                           thrust,
                                           cur_quat,
                                           computed_target_rpy,
-                                          target_rpy_rates,
-                                          vel_ctrl
-                                          ) 
+                                          target_rpy_rates
+                                          )
         cur_rpy = p.getEulerFromQuaternion(cur_quat)
         return rpm, pos_e, computed_target_rpy[2] - cur_rpy[2]
     
@@ -142,8 +142,7 @@ class DSLPIDControl(BaseControl):
                                cur_vel,
                                target_pos,
                                target_rpy,
-                               target_vel,
-                               vel_ctrl
+                               target_vel
                                ):
         """DSL's CF2.x PID position control.
 
@@ -175,10 +174,7 @@ class DSLPIDControl(BaseControl):
 
         """
         cur_rotation = np.array(p.getMatrixFromQuaternion(cur_quat)).reshape(3, 3)
-        if not vel_ctrl:
-            pos_e = target_pos - cur_pos
-        else:  
-            pos_e = np.zeros(3)
+        pos_e = target_pos - cur_pos
         vel_e = target_vel - cur_vel
         self.integral_pos_e = self.integral_pos_e + pos_e*control_timestep
         self.integral_pos_e = np.clip(self.integral_pos_e, -2., 2.)
@@ -188,7 +184,6 @@ class DSLPIDControl(BaseControl):
                         + np.multiply(self.I_COEFF_FOR, self.integral_pos_e) \
                         + np.multiply(self.D_COEFF_FOR, vel_e) + np.array([0, 0, self.GRAVITY])
         scalar_thrust = max(0., np.dot(target_thrust, cur_rotation[:,2]))
-        #print(f'cur_rotation = {cur_rotation}')
         thrust = (math.sqrt(scalar_thrust / (4*self.KF)) - self.PWM2RPM_CONST) / self.PWM2RPM_SCALE
         target_z_ax = target_thrust / np.linalg.norm(target_thrust)
         target_x_c = np.array([math.cos(target_rpy[2]), math.sin(target_rpy[2]), 0])
@@ -208,8 +203,7 @@ class DSLPIDControl(BaseControl):
                                thrust,
                                cur_quat,
                                target_euler,
-                               target_rpy_rates,
-                               vel_ctrl
+                               target_rpy_rates
                                ):
         """DSL's CF2.x PID attitude control.
 
@@ -234,16 +228,11 @@ class DSLPIDControl(BaseControl):
         """
         cur_rotation = np.array(p.getMatrixFromQuaternion(cur_quat)).reshape(3, 3)
         cur_rpy = np.array(p.getEulerFromQuaternion(cur_quat))
-        #target_euler = np.zeros(3)
         target_quat = (Rotation.from_euler('XYZ', target_euler, degrees=False)).as_quat()
         w,x,y,z = target_quat
         target_rotation = (Rotation.from_quat([w, x, y, z])).as_matrix()
         rot_matrix_e = np.dot((target_rotation.transpose()),cur_rotation) - np.dot(cur_rotation.transpose(),target_rotation)
-        # if not vel_ctrl or all(x==0 for x in target_rpy_rates):
-        #     rot_e = np.array([rot_matrix_e[2, 1], rot_matrix_e[0, 2], rot_matrix_e[1, 0]])
-        # else:
-        #     rot_e = np.zeros(3)
-        rot_e = np.array([rot_matrix_e[2, 1], rot_matrix_e[0, 2], rot_matrix_e[1, 0]])
+        rot_e = np.array([rot_matrix_e[2, 1], rot_matrix_e[0, 2], rot_matrix_e[1, 0]]) 
         rpy_rates_e = target_rpy_rates - (cur_rpy - self.last_rpy)/control_timestep
         self.last_rpy = cur_rpy
         self.integral_rpy_e = self.integral_rpy_e - rot_e*control_timestep

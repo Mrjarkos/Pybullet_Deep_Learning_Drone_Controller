@@ -4,6 +4,9 @@ import numpy as np
 import trajectories
 import utils 
 
+import sys
+sys.path.append("./gym-pybullet-drones")
+import pybullet
 from gym_pybullet_drones.envs.BaseAviary import DroneModel, Physics
 from gym_pybullet_drones.envs.CtrlAviary import CtrlAviary
 from gym_pybullet_drones.envs.VisionAviary import VisionAviary
@@ -27,30 +30,30 @@ STATES_DICT = {"x":0, "y":1, "z":2,
             "up":32, "uq":33, "ur":34,
             "uwp":35, "uwq":36, "uwr":37, 't':38}
 
+POS_DICT = {'x':0, 'y':1, 'z':2, 'ux':0, 'uy':1, 'uz':2}
+
 class Drone(object):
     def __init__(self, INIT_XYZS, INIT_RPYS,
                  control_timestep, control='',
                  i=0,
-                 drone=DroneModel("cf2x"), 
-                 vel_ctrl=False):
+                 drone=DroneModel("cf2x")):
         self.drone=drone
         self.ctrl=control
-        self.vel_ctrl = vel_ctrl
         self.INIT_XYZS = INIT_XYZS
         self.INIT_RPYS = INIT_RPYS
         self.name = i
         self.control_timestep = control_timestep
         self.action = np.array([0,0,0,0])
 
-    def setControl(self, control=None, env=None):
+    def setControl(self, control=None, drone_model=None):
         #### Initialize the controller ############################
         try:
             if control is None:
-                if env is not None:
+                if drone_model is not None:
                     if self.drone in [DroneModel.CF2X, DroneModel.CF2P]:
-                        self.ctrl = DSLPIDControl(env) 
+                        self.ctrl = DSLPIDControl(drone_model) 
                     elif self.drone in [DroneModel.HB]:
-                        self.ctrl = SimplePIDControl(env)
+                        self.ctrl = SimplePIDControl(drone_model)
                 else:
                     raise ValueError('controller or env is not setted')
             else: 
@@ -77,11 +80,10 @@ class Drone(object):
                                                         target_pos=self.INIT_XYZS + target_pos,
                                                         target_vel=target_vel,
                                                         target_rpy=self.INIT_RPYS + target_rpy,
-                                                        target_rpy_rates=target_rpy_rates,
-                                                        vel_ctrl=self.vel_ctrl)
+                                                        target_rpy_rates=target_rpy_rates)
             self.ref = np.hstack([self.INIT_XYZS+target_pos, target_vel, self.INIT_RPYS+target_rpy, target_rpy_rates])
-
-    def observate(self, state):
+            
+    def observe(self, state):
         self.state=state
     
     def __del__(self):
@@ -142,9 +144,15 @@ class PybulletSimDrone(object):
         self.INIT_RPYS = np.array([drone.INIT_RPYS for drone in self.drones])
         self.initializeEnv()
         for drone in self.drones:
-            drone.setControl(env=self.env)
+            if drone.ctrl=='':
+                drone.setControl(drone_model=DroneModel(self.drone_type))
 
     def initializeEnv(self):
+        if  hasattr(self, 'env'):
+            self.env.close()
+            self.gui_=self.gui
+        else:
+            self.gui_=False
         #### Create the environment with or without video capture ##
         self.env = CtrlAviary(drone_model=DroneModel(self.drone_type),
                             num_drones=self.num_drones,
@@ -154,10 +162,11 @@ class PybulletSimDrone(object):
                             neighbourhood_radius=10,
                             freq=self.simulation_freq_hz,
                             aggregate_phy_steps=self.AGGR_PHY_STEPS,
-                            gui=self.gui,
+                            gui=self.gui_,
                             record=self.record_video,
                             obstacles=self.obstacles,
-                            user_debug_gui=self.user_debug_gui)
+                            user_debug_gui=self.user_debug_gui
+                            )
 
         #### Obtain the PyBullet Client ID from the environment ####
         self.PYB_CLIENT = self.env.getPyBulletClient()
@@ -199,16 +208,13 @@ class PybulletSimDrone(object):
     def step(self, action):
         self.obs, self.reward, self.done, self.info = self.env.step(action)
         for drone in self.drones:
-            drone.observate(self.obs[str(drone.name)]["state"])
         ######### Stability ########################################
             if (   (abs(self.obs[str(drone.name)]["state"][STATES_DICT['p']])>0.7)
                 or (abs(self.obs[str(drone.name)]["state"][STATES_DICT['q']])>0.7)
-                or (abs(self.obs[str(drone.name)]["state"][STATES_DICT['z']])<2)
-                or (abs(self.obs[str(drone.name)]["state"][STATES_DICT['vz']])>12)
                 ):
                 self.unstable = True
                 print(f'***************Drone_{drone.name} UNSTABLE************')
-            
+                pass
     
     def disturb(self):
         self.l += 1
@@ -229,7 +235,7 @@ class PybulletSimDrone(object):
             self.Rand_3 = [0.5]*len(self.dist_params['DIST_STATES'])
             for i, p in enumerate(self.dist_params['D_PROB']):
                 if np.random.rand()< p:
-                    self.Rand_3[i] = 0.8# np.random.rand()
+                    self.Rand_3[i] = np.random.rand()
     
     def computeControl(self, drone):
         #### Replay control for the current way point #############
@@ -253,7 +259,7 @@ class PybulletSimDrone(object):
                         )
 
     def runSim(self):
-        try:
+        #try:
             #### Run the simulation ####################################
             actions = {str(drone.name): np.array([0,0,0,0]) for drone in self.drones}
             START = time.time()
@@ -262,9 +268,11 @@ class PybulletSimDrone(object):
             for i in range(0, int(self.duration_sec*self.env.SIM_FREQ), self.AGGR_PHY_STEPS):
                 self.Rand_4 = np.random.rand()
                 self.step(actions)
+                
                 if self.disturbances and ((i%self.DIST_EVERY_N_STEPS == 0) or self.l>0):
                     self.disturb()
                 for drone in self.drones:
+                    drone.observe(self.obs[str(drone.name)]["state"])
                     if i%self.CTRL_EVERY_N_STEPS == 0:
                         actions[str(drone.name)] = self.computeControl(drone)
                     self.log(i, drone)
@@ -292,10 +300,10 @@ class PybulletSimDrone(object):
                     self.logger.save_csv(datetime.now().strftime("%m_%d_%Y_%H_%M_%S"))
             if (self.plot or self.save_figure) and not self.unstable:
                     self.logger.plot(save_figure=self.save_figure, plot=self.plot, name=self.data_path)
-        except:
-            pass
+        #except:
+        #    pass
 
-        return self.logger
+            return self.logger
     
     def __del__(self):
         attr = []
@@ -358,6 +366,12 @@ class PybulletSimDrone(object):
                                   min=params['min'],
                                   N_cycles=params['N_cycles'],
                                   each=params['each'])
+        elif type=='big_step_notret0':
+            z = trajectories.big_step_notret0(length=self.NUM_WP,
+                                  max=params['max'],
+                                  min=params['min'],
+                                  N_cycles=params['N_cycles'],
+                                  each=params['each'])                          
         elif type=='step_notret0':
             z = trajectories.step_notret0(length=self.NUM_WP,
                                   max=params['max'],

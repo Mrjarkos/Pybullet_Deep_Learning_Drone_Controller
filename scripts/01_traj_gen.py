@@ -20,18 +20,17 @@ if __name__ == "__main__":
     parser.add_argument('--simulation_freq_hz', default=240,        type=int,           help='Simulation frequency in Hz (default: 240)', metavar='')
     parser.add_argument('--control_freq_hz',    default=48,         type=int,           help='Control frequency in Hz (default: 48)', metavar='')
     parser.add_argument('--duration_sec',       default=100,        type=int,           help='Duration of the simulation in seconds (default: 5)', metavar='')
-    parser.add_argument('--vel_ctrl',           default=True,       type=str2bool,      help='Whether to use Speed Controller (default: False)', metavar='')
     parser.add_argument('--save_data',          default=True,       type=str2bool,      help='Whether to save the data (default: True)', metavar='')
     parser.add_argument('--save_figure',        default=True,       type=str2bool,      help='Whether to save the figure (default: True)', metavar='')
     ARGS = parser.parse_args()
 
-    #axis=['vz','vy', 'vx', 'r']
-    axis=['vz']
+    axis=['z','y','x']
+    #axis=['vz']
    
     #DIST_STATES = ['vz', 'p', 'q', 'r']
-    DIST_STATES = ['vz', 'p', 'q']
-    D_FACTOR = [1, 0.2, 0.2]
-    D_PROB = [0.8, 0.5, 0.5]
+    DIST_STATES = ['p', 'q']
+    D_FACTOR = [0.2, 0.2]
+    D_PROB = [0.5, 0.5]
     #D_FACTOR = [1, 0.2, 0.2, 1]
     #D_PROB = [0.8, 0.5, 0.5, 0.8]
     DIST_TIME = 12
@@ -46,8 +45,8 @@ if __name__ == "__main__":
     }
 
     N_UNIQUE_TRAJ = 9 #Number of unique trajectories
-    N_SAMPLES = 17 #Number of samples per unique type of trajectory
-    STEP_EACH_CHANGE = 20
+    N_SAMPLES = 25 #Number of samples per unique type of trajectory
+    STEP_EACH_CHANGE = 35
     
     #### Initialize the simulation #############################
     H = 50
@@ -57,6 +56,7 @@ if __name__ == "__main__":
     AGGR_PHY_STEPS = int(ARGS.simulation_freq_hz/ARGS.control_freq_hz) if ARGS.aggregate else 1
 
     for k in range(N_SAMPLES*N_UNIQUE_TRAJ):
+        path = ""
         params = []
         trajectories = []
         for ax in axis:
@@ -67,6 +67,10 @@ if __name__ == "__main__":
                 K = 6
             elif ax == 'r':
                 K = np.pi
+            elif ax == 'z':
+                K = 3
+            elif ax == 'y' or ax == 'x':
+                K = 0.25
             else:
                 K = 3
 
@@ -89,11 +93,11 @@ if __name__ == "__main__":
             elif l==4:
                 traj_type = "step_ret0"
                 trajectories.append('step_ret0')
-                params.append({'max': (K/2)*Rand_1, 'min': -K/2*Rand_1, 'N_cycles': 6, 'each':8*STEP_EACH_CHANGE})
+                params.append({'max': (K/2)*Rand_1, 'min': -K/2*Rand_1, 'N_cycles': 6, 'each':8.5*STEP_EACH_CHANGE})
             elif l==5:
                 traj_type = "big_step_notret0"
                 trajectories.append('big_step_notret0')
-                params.append({'max': K*Rand_1, 'min': -K*Rand_1, 'N_cycles': 4, 'each':15*STEP_EACH_CHANGE})
+                params.append({'max': K/2*Rand_1, 'min': -K/2*Rand_1, 'N_cycles': 4, 'each':15*STEP_EACH_CHANGE})
             elif l==6:
                 traj_type = "stopped_1"
                 trajectories.append('stopped')
@@ -107,6 +111,7 @@ if __name__ == "__main__":
                 trajectories.append('noise')
                 params.append({'val':(Rand_1+0.35), 'f0':(K/10)/(7*Rand_1+1), 'order':15})
 
+            path+=traj_type+'__'
         pySim = PybulletSimDrone(drone_type=ARGS.drone,
                                 num_drones = ARGS.num_drones,
                                 physics=ARGS.physics, 
@@ -123,7 +128,7 @@ if __name__ == "__main__":
                                 console_out=True,
                                 dist_params = dist_params,
                                 duration_sec=ARGS.duration_sec,
-                                data_path = f'{k}_{str(trajectories)}')
+                                data_path = f'{k}_{path[0:-2]}')
         drones = []
         for i in range(num_drones):
             drones.append(
@@ -131,7 +136,6 @@ if __name__ == "__main__":
                             INIT_RPYS=INIT_RPYS[i],
                             control_timestep=pySim.control_timestep,
                             i=i,
-                            vel_ctrl = ARGS.vel_ctrl
                             )
                         )
         pySim.setdrones(drones)
