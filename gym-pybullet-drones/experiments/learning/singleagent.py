@@ -60,18 +60,13 @@ if __name__ == "__main__":
     parser.add_argument('--algo',       default='ppo',        type=str,             choices=['a2c', 'ppo', 'sac', 'td3', 'ddpg'],        help='Help (default: ..)', metavar='')
     parser.add_argument('--obs',        default='kin',        type=ObservationType,                                                      help='Help (default: ..)', metavar='')
     parser.add_argument('--act',        default='one_d_rpm',  type=ActionType,                                                           help='Help (default: ..)', metavar='')
-    parser.add_argument('--cpu',        default='1',          type=int,                                                                  help='Help (default: ..)', metavar='')        
+    parser.add_argument('--cpu',        default='8',          type=int,                                                                  help='Help (default: ..)', metavar='')        
     ARGS = parser.parse_args()
 
     #### Save directory ########################################
     filename = os.path.dirname(os.path.abspath(__file__))+'/results/save-'+ARGS.env+'-'+ARGS.algo+'-'+ARGS.obs.value+'-'+ARGS.act.value+'-'+datetime.now().strftime("%m.%d.%Y_%H.%M.%S")
     if not os.path.exists(filename):
         os.makedirs(filename+'/')
-
-    #### Print out current git commit hash #####################
-    git_commit = subprocess.check_output(["git", "describe", "--tags"]).strip()
-    with open(filename+'/git_commit.txt', 'w+') as f:
-        f.write(str(git_commit))
 
     #### Warning ###############################################
     if ARGS.env == 'tune' and ARGS.act != ActionType.TUN:
@@ -207,7 +202,7 @@ if __name__ == "__main__":
                                     n_envs=1,
                                     seed=0
                                     )
-        if env_nam == "hover-aviary-v0": 
+        if env_name == "hover-aviary-v0": 
             eval_env = make_vec_env(HoverAviary,
                                     env_kwargs=sa_env_kwargs,
                                     n_envs=1,

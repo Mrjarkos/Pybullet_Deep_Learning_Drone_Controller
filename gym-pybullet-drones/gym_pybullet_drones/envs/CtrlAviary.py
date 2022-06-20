@@ -160,31 +160,44 @@ class CtrlAviary(BaseAviary):
     ################################################################################
 
     def _computeReward(self):
-        """Computes the current reward value(s).
-
-        Unused as this subclass is not meant for reinforcement learning.
+        """Computes the current reward value.
 
         Returns
         -------
-        int
-            Dummy value.
+        float
+            The reward.
 
         """
-        return -1
+        # state = self._computeObs()
+        # return {str(i): {"reward":
+        #         (
+        #             -1 * np.linalg.norm(
+        #                 [
+        #                     state[str(i)]["state"]["x"] - state[str(i)]["state"]["ux"],
+        #                     state[str(i)]["state"]["y"] - state[str(i)]["state"]["uy"],
+        #                     state[str(i)]["state"]["z"] - state[str(i)]["state"]["uz"],
+        #                     #state[str(i)]["state"]["r"] - state[str(i)]["state"]["ur"]
+        #                 ]
+        #             )**2
+        #         )
+        #     } for i in range(self.NUM_DRONES)}
+        return 0
 
     ################################################################################
     
     def _computeDone(self):
-        """Computes the current done value(s).
+        """Computes the current done value.
 
-        Unused as this subclass is not meant for reinforcement learning.
 
         Returns
         -------
         bool
-            Dummy value.
+            Whether the current episode is done.
 
         """
+        # if self.step_counter/self.SIM_FREQ > self.EPISODE_LEN_SEC:
+        #     return True
+        # else:
         return False
 
     ################################################################################
@@ -192,7 +205,7 @@ class CtrlAviary(BaseAviary):
     def _computeInfo(self):
         """Computes the current info dict(s).
 
-        Unused as this subclass is not meant for reinforcement learning.
+        Unused.
 
         Returns
         -------

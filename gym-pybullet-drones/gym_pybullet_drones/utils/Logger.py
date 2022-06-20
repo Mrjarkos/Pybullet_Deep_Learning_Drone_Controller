@@ -4,6 +4,7 @@ from datetime import datetime
 from cycler import cycler
 import numpy as np
 import matplotlib.pyplot as plt
+from matplotlib.gridspec import GridSpec
 import pandas as pd
 
 os.environ['KMP_DUPLICATE_LIB_OK']='True'
@@ -50,6 +51,7 @@ class Logger(object):
             Used to preallocate the log arrays (improves performance).
 
         """
+        self.unstable= [False for i in range(num_drones)]
         self.LOGGING_FREQ_HZ = logging_freq_hz
         self.NUM_DRONES = num_drones
         self.PREALLOCATED_ARRAYS = False if duration_sec == 0 else True
@@ -121,7 +123,13 @@ class Logger(object):
         self.controls[drone, :, current_counter] = control
         self.counters[drone] = current_counter + 1
 
-    def getStates(self, drone, states):
+    def set_stability(self, drone, stable):
+        self.unstable[drone] = stable
+        
+    def get_stability(self, drone):
+        return self.unstable[drone]
+        
+    def getStates(self, drone, states=[*STATES_DICT, 't']):
         st_dict = {}
         for state in states:
             if state[0]=='u':
@@ -239,6 +247,7 @@ class Logger(object):
             path = os.path.dirname(os.path.abspath(__file__))+"/../../files/logs/"
         pd.concat([result, controls], axis=1, join='inner').to_csv(path+name+".csv", index=False)
     
+    
     def plot(self, pwm=False, save_figure=False, name="", path="", format='png', plot=True):
         """Logs entries for a single simulation step, of a single drone.
 
@@ -249,7 +258,7 @@ class Logger(object):
 
         """
         #### Loop over colors and line styles ######################
-        plt.rc('axes', prop_cycle=(cycler('color', ['r', 'g', 'b', 'g']) + cycler('linestyle', ['-', '--', '-', '--'])))
+        plt.rc('axes', prop_cycle=(cycler('color', ['r', 'g', 'b', 'g', 'y', 'g', 'c', 'g']) + cycler('linestyle', ['-', '--', '-', '--', '-', '--', '-', '--'])))
         fig, axs = plt.subplots(10, 2, figsize=(15,15))
         t = np.arange(0, self.timestamps.shape[1]/self.LOGGING_FREQ_HZ, 1/self.LOGGING_FREQ_HZ)
 
@@ -441,12 +450,51 @@ class Logger(object):
                             wspace=0.15,
                             hspace=0.0
                             )
-        if plot:
-            plt.show(block=False)
-
+        
         if save_figure:
             if name == "":
                 name = "save-flight-"+datetime.now().strftime("%m.%d.%Y_%H.%M.%S")
             if path == "":
                 path = os.path.dirname(os.path.abspath(__file__))+"/../../files/logs/"
             plt.savefig(path+name+'.'+format, dpi=300, format=format) 
+
+        ### 3D Plot
+        fig = plt.figure(figsize=(15,15))
+        gs = GridSpec(2, 2, figure=fig)
+        ax1 = fig.add_subplot(gs[:, 0],  projection='3d')
+        ax2 = fig.add_subplot(gs[0, 1])
+        ax3 = fig.add_subplot(gs[1, 1])
+        for j in range(self.NUM_DRONES):
+            axs[row, col].plot(t, self.states[j, 0, :], label="drone_"+str(j))
+            axs[row, col].plot(t, self.controls[j, 0, :], label="ref_"+str(j))
+            x = self.states[j, 0, :]
+            y = self.states[j, 1, :]
+            z = self.states[j, 2, :]
+            rx = self.controls[j, 0, :]
+            ry = self.controls[j, 1, :]
+            rz = self.controls[j, 2, :]
+            ax1.plot3D(x, y, z, label="drone_"+str(j));
+            ax1.plot3D(rx, ry, rz, label="ref_"+str(j));
+            ax2.scatter(x, y, label="drone_"+str(j));
+            ax2.scatter(rx, ry, label="ref_"+str(j));
+            ax3.plot(t, z, label="drone_"+str(j));
+            ax3.plot(t, rz, label="ref_"+str(j));
+        
+        ax1.set_xlabel('x (m)')
+        ax1.set_ylabel('y (m)')
+        ax1.set_zlabel('z (m)')
+        ax1.grid(True)
+        ax1.legend(loc='upper right',frameon=True)
+        
+        ax2.set_xlabel('x (m)')
+        ax2.set_ylabel('y (m)')
+        ax2.grid(True)
+        ax2.legend(loc='upper right',frameon=True)
+        
+        ax3.set_xlabel('t (s)')
+        ax3.set_ylabel('z (m)')
+        ax3.grid(True)
+        ax3.legend(loc='upper right',frameon=True)
+                
+        if plot:
+            plt.show(block=False)

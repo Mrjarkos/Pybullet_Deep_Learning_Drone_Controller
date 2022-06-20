@@ -114,3 +114,5 @@ if __name__ == "__main__":
 
     #### Plot the simulation results ###########################
     logger.plot()
+    input("Press Enter to exit...")
+    

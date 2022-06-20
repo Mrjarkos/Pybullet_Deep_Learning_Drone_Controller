@@ -5,6 +5,12 @@
 *.csv
 *.csv-1
 
+#Temporales
+./Models/tmp/
+./notebooks/Models/
+./tmp/
+./logs/
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]

@@ -30,6 +30,7 @@ import matplotlib.pyplot as plt
 
 
 import sys
+
 sys.path.append("./gym-pybullet-drones")
 
 from gym_pybullet_drones.envs.BaseAviary import DroneModel, Physics
@@ -48,7 +49,7 @@ if __name__ == "__main__":
     parser.add_argument('--num_drones',         default=1,          type=int,           help='Number of drones (default: 3)', metavar='')
     parser.add_argument('--physics',            default="pyb",      type=Physics,       help='Physics updates (default: PYB)', metavar='', choices=Physics)
     parser.add_argument('--vision',             default=False,      type=str2bool,      help='Whether to use VisionAviary (default: False)', metavar='')
-    parser.add_argument('--gui',                default=True,       type=str2bool,      help='Whether to use PyBullet GUI (default: True)', metavar='')
+    parser.add_argument('--gui',                default=False,       type=str2bool,      help='Whether to use PyBullet GUI (default: True)', metavar='')
     parser.add_argument('--record_video',       default=False,      type=str2bool,      help='Whether to record a video (default: False)', metavar='')
     parser.add_argument('--plot',               default=True,       type=str2bool,      help='Whether to plot the simulation results (default: True)', metavar='')
     parser.add_argument('--user_debug_gui',     default=False,      type=str2bool,      help='Whether to add debug lines and parameters to the GUI (default: False)', metavar='')
@@ -57,10 +58,9 @@ if __name__ == "__main__":
     parser.add_argument('--simulation_freq_hz', default=240,        type=int,           help='Simulation frequency in Hz (default: 240)', metavar='')
     parser.add_argument('--control_freq_hz',    default=48,         type=int,           help='Control frequency in Hz (default: 48)', metavar='')
     parser.add_argument('--duration_sec',       default=10,          type=int,           help='Duration of the simulation in seconds (default: 5)', metavar='')
-    parser.add_argument('--vel_ctrl',           default=True,       type=str2bool,      help='Whether to use Speed Controller (default: False)', metavar='')
     ARGS = parser.parse_args()
 
-    Dataset_name='Dataset_XYZ_1'
+    Dataset_name='Dataset_final'
     directory = os.path.dirname(os.path.abspath(__file__))+"/../logs/Datasets/"+Dataset_name
 
     #for filename in os.listdir(directory):
@@ -73,7 +73,7 @@ if __name__ == "__main__":
         df = pd.read_csv(os.path.join(directory, filename))
         actions = df[["RPM0", "RPM1", "RPM2", "RPM3"]]
         #### Initialize the simulation #############################
-        H = 3#df.iloc[0, 3]
+        H = df.iloc[0, 3]
         H_STEP = .05
         INIT_XYZS = np.array([[0, 0, H+i*H_STEP] for i in range(ARGS.num_drones)])
         INIT_RPYS = np.array([[0, 0,  i * (np.pi/2)/ARGS.num_drones] for i in range(ARGS.num_drones)])
@@ -137,3 +137,89 @@ if __name__ == "__main__":
         #### Plot the simulation results ###########################
         if ARGS.plot:
             logger.plot(plot=True)
+            log = logger.getStates(0)
+            colors = ['#1f77b4', '#ff7f0e']
+            ctrls = ['DSLPID', 'Referencia']
+            axis_ctrl = ['ux', 'uy', 'uz', 'ur' ]
+            axis_states = ['x', 'y', 'z', 'p', 'q', 'r']
+            axis_states_2 = ['vx', 'vy', 'vz', 'wp', 'wq', 'wr', 'ax', 'ay', 'az', 'ap', 'aq', 'ar']
+            loc = 'upper right'
+            #sig_type = 'círculo con físicas básicas'
+            sig_type = filename
+            #sig_type = 'círculo con arrastre'
+            fig, axs = plt.subplots(6, 3, figsize=(18,15), sharex=True)
+            axs[0, 0].plot(log['t'], log['x'], label=ctrls[0], color=colors[0])
+            axs[0, 0].plot(log['t'], log['ux'], label=ctrls[1], color=colors[1])
+            axs[0, 1].plot(log['t'], log['vx'], label=ctrls[0], color=colors[0])
+            axs[0, 2].plot(log['t'], log['ax'], label=ctrls[0], color=colors[0])
+            
+            axs[1, 0].plot(log['t'], log['y'], label=ctrls[0], color=colors[0])
+            axs[1, 0].plot(log['t'], log['uy'], label=ctrls[1], color=colors[1])
+            axs[1, 1].plot(log['t'], log['vy'], label=ctrls[0], color=colors[0])
+            axs[1, 2].plot(log['t'], log['ay'], label=ctrls[0], color=colors[0])
+            
+            axs[2, 0].plot(log['t'], log['z'], label=ctrls[0], color=colors[0])
+            axs[2, 0].plot(log['t'], log['uz'], label=ctrls[1], color=colors[1])
+            axs[2, 1].plot(log['t'], log['vz'], label=ctrls[0], color=colors[0])
+            axs[2, 2].plot(log['t'], log['az'], label=ctrls[0], color=colors[0])
+            
+            axs[3, 0].plot(log['t'], log['r'], label=ctrls[0], color=colors[0])
+            axs[3, 0].plot(log['t'], log['ur'], label=ctrls[1], color=colors[1])
+            axs[3, 1].plot(log['t'], log['wr'], label=ctrls[0], color=colors[0])
+            axs[3, 2].plot(log['t'], log['ar'], label=ctrls[0], color=colors[0])
+            
+            axs[4, 0].plot(log['t'], log['p'], label=ctrls[0], color=colors[0])
+            axs[4, 1].plot(log['t'], log['wp'], label=ctrls[0], color=colors[0])
+            axs[4, 2].plot(log['t'], log['ap'], label=ctrls[0], color=colors[0])
+            
+            axs[5, 0].plot(log['t'], log['q'], label=ctrls[0], color=colors[0])
+            axs[5, 1].plot(log['t'], log['wq'], label=ctrls[0], color=colors[0])
+            axs[5, 2].plot(log['t'], log['aq'], label=ctrls[0], color=colors[0])
+            
+            axs[5, 0].set_xlabel('Tiempo (s)')
+            axs[5, 1].set_xlabel('Tiempo (s)')
+            axs[5, 2].set_xlabel('Tiempo (s)')
+            
+            axs[0, 0].set_ylabel('x (m)')
+            axs[0, 1].set_ylabel('vx (m/s)')
+            axs[0, 2].set_ylabel(r'$a_x$ ($m/s^2$)')
+            axs[1, 0].set_ylabel('y (m)')
+            axs[1, 1].set_ylabel(r'$v_y$ ($m/s$)')
+            axs[1, 2].set_ylabel(r'a_x ($m/s^2$)')
+            axs[2, 0].set_ylabel('z (m)')
+            axs[2, 1].set_ylabel(r'$v_z$ (m/s)')
+            axs[2, 2].set_ylabel(r'$a_z$ ($m/s^2$)')
+            axs[3, 0].set_ylabel(r'$\psi$ (rad)')
+            axs[3, 1].set_ylabel(r'$\omega_\psi$ (rad/s)')
+            axs[3, 2].set_ylabel(r'$\alpha_\psi$ ($rad/s^2$)')
+            axs[4, 0].set_ylabel(r'$\phi$ (rad)')
+            axs[4, 1].set_ylabel(r'$\omega_\phi$ (rad/s)')
+            axs[4, 2].set_ylabel(r'$\alpha_\phi$ ($rad/s^2$)')
+            axs[5, 0].set_ylabel(r'$\theta$ (rad)')
+            axs[5, 1].set_ylabel(r'$\omega_\theta$ (rad/s)')
+            axs[5, 2].set_ylabel(r'$\alpha_\theta$ ($rad/s^2$)')
+            
+            axs[0, 0].grid()
+            axs[0, 1].grid()
+            axs[0, 2].grid()
+            axs[1, 0].grid()
+            axs[1, 1].grid()
+            axs[1, 2].grid()
+            axs[2, 0].grid()
+            axs[2, 1].grid()
+            axs[2, 2].grid()
+            axs[3, 0].grid()
+            axs[3, 1].grid()
+            axs[3, 2].grid()
+            axs[4, 0].grid()
+            axs[4, 1].grid()
+            axs[4, 2].grid()
+            axs[5, 0].grid()
+            axs[5, 1].grid()
+            axs[5, 2].grid()
+            
+            axs[0, 0].legend(loc='upper center', bbox_to_anchor=(0.5, -0.05),
+                            fancybox=True, shadow=True, ncol=5)
+
+            
+            plt.show()

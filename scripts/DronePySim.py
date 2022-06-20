@@ -1,6 +1,9 @@
 import time
 from datetime import datetime
 import numpy as np
+seed = 5
+np.random.seed(seed)
+np.seterr(divide = 'ignore')
 import trajectories
 import utils 
 
@@ -50,9 +53,9 @@ class Drone(object):
         try:
             if control is None:
                 if drone_model is not None:
-                    if self.drone in [DroneModel.CF2X, DroneModel.CF2P]:
+                    if (drone_model in [DroneModel.CF2X, DroneModel.CF2P]):
                         self.ctrl = DSLPIDControl(drone_model) 
-                    elif self.drone in [DroneModel.HB]:
+                    elif drone_model in [DroneModel.HB]:
                         self.ctrl = SimplePIDControl(drone_model)
                 else:
                     raise ValueError('controller or env is not setted')
@@ -111,7 +114,9 @@ class PybulletSimDrone(object):
                 dist_params = {},
                 simulation_freq_hz=240,
                 control_freq_hz=48,
-                duration_sec=10):
+                duration_sec=10,
+                step_time = 2.5,
+                ):
                 
         self.drone_type=drone_type
         self.num_drones=num_drones
@@ -130,12 +135,15 @@ class PybulletSimDrone(object):
         self.simulation_freq_hz = simulation_freq_hz
         self.control_freq_hz = control_freq_hz
         self.duration_sec = duration_sec
+        self.step_time = step_time
         self.disturbances = bool(dist_params)
         self.dist_params = dist_params
         self.AGGR_PHY_STEPS = int(self.simulation_freq_hz/self.control_freq_hz) if self.aggregate else 1
-        self.INIT_XYZS = np.array([[i*0.2, i*0.2, 10+i*0.5] for i in range(self.num_drones)])
+        self.INIT_XYZS = np.array([[i*0.2, i*0.2, i*0.5] for i in range(self.num_drones)])
         self.INIT_RPYS = np.array([[0, 0,  i * (np.pi/2)/self.num_drones] for i in range(self.num_drones)])
         self.initializeEnv()
+        
+        #self.kk=0
 
     def setdrones(self, drones):
         self.drones=drones
@@ -181,29 +189,47 @@ class PybulletSimDrone(object):
         ### Disturbances variables ######
         if self.disturbances:
             self.l=0
-            self.Rand_3 = [0.5]*len(self.dist_params['DIST_STATES'])
+            self.Rand_3 = [np.random.randn()]*len(self.dist_params['DIST_STATES'])
             self.DIST_EVERY_N_STEPS = np.ceil(self.duration_sec*self.env.SIM_FREQ/self.dist_params['N_DIST'])
 
-    def initTrajectory(self, trajectories=[[]], axis=[], params=[{}]):
+    def initTrajectory(self, trajectories=[[]], axis=[], params=[], wp_counters=[]):
         self.NUM_WP = self.control_freq_hz*self.duration_sec
-        self.wp_counters = np.array([0]*self.num_drones)
+        if len(wp_counters)==0:
+            self.wp_counters = np.array([0]*self.num_drones)
+        else:
+            self.wp_counters=wp_counters
         ctrl_ax = ['x', 'y', 'z', 'vx', 'vy', 'vz', 'r', 'wr']
         traj = {}
+        
         for ax in ctrl_ax:
             traj[ax] = np.zeros(self.NUM_WP)
         for i, ax in enumerate(axis):
-            traj[ax] = self.selTrajectory(type=trajectories[i], params=params[i])
-        
+            if len(params)==0:
+                traj[ax] = trajectories[i]
+            else:
+                traj[ax] = self.selTrajectory(type=trajectories[i], params=params[i])
+                
+            if ax == 'r':
+                traj[ax] = utils.limit_rad_trajectory(traj[ax])
+                
         self.TARGET_POS = np.zeros((self.NUM_WP,3))
         self.TARGET_VEL = np.zeros((self.NUM_WP,3))
         self.TARGET_RPY = np.zeros((self.NUM_WP,3))
         self.TARGET_RPY_RATES = np.zeros((self.NUM_WP,3))
     
+        #St = int(self.NUM_WP//self.duration_sec)
+        St = int(self.step_time*int(self.NUM_WP//self.duration_sec))
         for i in range(self.NUM_WP):
-            self.TARGET_POS[i, :] = traj['x'][i], traj['y'][i], traj['z'][i]
-            self.TARGET_VEL[i, :] = traj['vx'][i], traj['vy'][i], traj['vz'][i]
-            self.TARGET_RPY[i, :] = 0, 0, traj['r'][i]
-            self.TARGET_RPY_RATES[i, :] = 0, 0, traj['wr'][i]
+            if i>=St and i<(self.NUM_WP-St):
+                self.TARGET_POS[i, :] = traj['x'][i-St], traj['y'][i-St], traj['z'][i-St]
+                self.TARGET_VEL[i, :] = traj['vx'][i-St], traj['vy'][i-St], traj['vz'][i-St]
+                self.TARGET_RPY[i, :] = 0, 0, traj['r'][i-St]
+                self.TARGET_RPY_RATES[i, :] = 0, 0, traj['wr'][i-St]
+            elif i>=(self.NUM_WP-St):
+                self.TARGET_POS[i, :] = self.TARGET_POS[i-1, :]
+                self.TARGET_VEL[i, :] = self.TARGET_VEL[i-1, :]
+                self.TARGET_RPY[i, :] = self.TARGET_RPY[i-1, :]
+                self.TARGET_RPY_RATES[i, :] = self.TARGET_RPY_RATES[i-1, :]
     
     def step(self, action):
         self.obs, self.reward, self.done, self.info = self.env.step(action)
@@ -212,7 +238,7 @@ class PybulletSimDrone(object):
             if (   (abs(self.obs[str(drone.name)]["state"][STATES_DICT['p']])>0.7)
                 or (abs(self.obs[str(drone.name)]["state"][STATES_DICT['q']])>0.7)
                 ):
-                self.unstable = True
+                self.unstable[drone.name] = True
                 print(f'***************Drone_{drone.name} UNSTABLE************')
                 pass
     
@@ -229,13 +255,20 @@ class PybulletSimDrone(object):
                                                 self.obs[str(j)]["state"][9])#yaw
                 for q in range(len(quat)):
                     self.obs[str(j)]["state"][q+3] = quat[q]
-        dt = np.random.rand()
+        dt = 1
+        #dt = np.random.rand()
         if self.l>(self.dist_params['DIST_TIME']*(1+dt))*self.CTRL_EVERY_N_STEPS+1:
             self.l=0
+            #######################3
+            #if self.kk>0:
+                #self.disturbances = False
+            #self.kk+=1
+            ########################3
             self.Rand_3 = [0.5]*len(self.dist_params['DIST_STATES'])
             for i, p in enumerate(self.dist_params['D_PROB']):
                 if np.random.rand()< p:
-                    self.Rand_3[i] = np.random.rand()
+                    self.Rand_3[i] = 0.7
+                    #self.Rand_3[i] = np.random.rand()
     
     def computeControl(self, drone):
         #### Replay control for the current way point #############
@@ -263,10 +296,10 @@ class PybulletSimDrone(object):
             #### Run the simulation ####################################
             actions = {str(drone.name): np.array([0,0,0,0]) for drone in self.drones}
             START = time.time()
-            self.unstable = False
+            self.unstable = [False for i in range(self.num_drones)]
             
             for i in range(0, int(self.duration_sec*self.env.SIM_FREQ), self.AGGR_PHY_STEPS):
-                self.Rand_4 = np.random.rand()
+                #self.Rand_4 = np.random.rand()
                 self.step(actions)
                 
                 if self.disturbances and ((i%self.DIST_EVERY_N_STEPS == 0) or self.l>0):
@@ -276,6 +309,8 @@ class PybulletSimDrone(object):
                     if i%self.CTRL_EVERY_N_STEPS == 0:
                         actions[str(drone.name)] = self.computeControl(drone)
                     self.log(i, drone)
+                if any(self.unstable):
+                    break
 
             #### Printout ##############################################
                 if i%self.env.SIM_FREQ == 0 and self.console_out:
@@ -285,24 +320,21 @@ class PybulletSimDrone(object):
                 if self.gui:
                     sync(i, START, self.env.TIMESTEP)
                 
-                ######### Stability ########################################
-                if self.unstable:
-                    break
-
             #### Close the environment #################################
             self.env.close()
 
             #### Save the simulation results ###########################
-            if self.save_data and not self.unstable:
+            if self.save_data and not any(self.unstable):
                 if self.data_path:
+                    print(self.data_path)
                     self.logger.save_csv(self.data_path)
                 else:
                     self.logger.save_csv(datetime.now().strftime("%m_%d_%Y_%H_%M_%S"))
-            if (self.plot or self.save_figure) and not self.unstable:
+            if (self.plot or self.save_figure) and not any(self.unstable):
                     self.logger.plot(save_figure=self.save_figure, plot=self.plot, name=self.data_path)
         #except:
         #    pass
-
+            self.logger.unstable=self.unstable
             return self.logger
     
     def __del__(self):
@@ -331,7 +363,12 @@ class PybulletSimDrone(object):
                                   fs=self.control_freq_hz) 
         elif type=='sin':
             z = trajectories.sin(duration=self.NUM_WP,
-                                  m=params['val'],
+                                  a=params['val'],
+                                  f=params['f'],
+                                  fs=self.control_freq_hz)
+        elif type=='cos':
+            z = trajectories.cos(duration=self.NUM_WP,
+                                  a=params['val'],
                                   f=params['f'],
                                   fs=self.control_freq_hz)
         elif type=='noise':
@@ -357,9 +394,19 @@ class PybulletSimDrone(object):
                                   k=params['val'],
                                   f0=params['f0'],
                                   f1=params['f1'],
-                                  t1=params['t1'],
+                                  t1=0.9*self.NUM_WP,
                                   method=params['method'],
-                                  fs=self.control_freq_hz)
+                                  fs=self.control_freq_hz,
+                                  phi = params['phi'])
+        elif type=='chirp_amplin':
+            z = trajectories.chirp_amplin(duration=self.NUM_WP,
+                                  k=params['val'],
+                                  f0=params['f0'],
+                                  f1=params['f1'],
+                                  t1=0.9*self.NUM_WP,
+                                  method=params['method'],
+                                  fs=self.control_freq_hz,
+                                  phi = params['phi'])
         elif type=='big_step_ret0':
             z = trajectories.big_step_ret0(length=self.NUM_WP,
                                   max=params['max'],
@@ -400,3 +447,44 @@ class PybulletSimDrone(object):
         else:
             z = trajectories.stopped(self.NUM_WP, 0)
         return z
+
+class DeepLearningSim(PybulletSimDrone):
+    def __init__(self, drone_type='cf2x',
+                num_drones = 1,
+                physics="pyb", 
+                vision=False,
+                gui=False,
+                record_video=False,
+                plot=False, 
+                save_figure=False, 
+                console_out=True,
+                user_debug_gui=False,
+                aggregate=False, 
+                obstacles=False,
+                save_data = False,
+                data_path = '',
+                dist_params = {},
+                simulation_freq_hz=240,
+                control_freq_hz=48,
+                duration_sec=10):
+        #call super class constructor and pass parameters
+        super(DeepLearningSim, self).__init__(drone_type=drone_type,
+                                              num_drones = num_drones,
+                                              physics=physics, 
+                                              vision=vision,
+                                              gui=gui,
+                                              record_video=record_video,
+                                              plot=plot, 
+                                              save_figure=save_figure, 
+                                              console_out=console_out,
+                                              user_debug_gui=user_debug_gui,
+                                              aggregate=aggregate, 
+                                              obstacles=obstacles,
+                                              save_data = save_data,
+                                              data_path = data_path,
+                                              dist_params = dist_params,
+                                              simulation_freq_hz=simulation_freq_hz,
+                                              control_freq_hz=control_freq_hz,
+                                              duration_sec=duration_sec)
+        
+        
