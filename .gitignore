@@ -4,12 +4,16 @@
 #Dataset
 *.csv
 *.csv-1
+.rar
 
-#Temporales
-./Models/tmp/
+#Temps
+.src/models/tmp/
 ./notebooks/Models/
 ./tmp/
 ./logs/
+
+#Deps
+./Deps
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
